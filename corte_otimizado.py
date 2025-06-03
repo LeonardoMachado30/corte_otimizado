@@ -2,11 +2,13 @@ import tkinter as tk
 from tkinter import ttk, Menu
 from tkinter import messagebox, simpledialog, filedialog
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.patches as patches
 import pandas as pd
 import os
 
-# --- Algoritmo de Corte ---
+# --- Algoritmo de Corte (sem alterações nesta função em si) ---
 def cortar_chapas(largura_chapa_cm, altura_chapa_cm, pecas_cm_com_id_e_qtd_original):
     chapas_utilizadas = []
     pecas_para_alocar_geral = sorted(
@@ -25,7 +27,7 @@ def cortar_chapas(largura_chapa_cm, altura_chapa_cm, pecas_cm_com_id_e_qtd_origi
             'espacos_disponiveis': [(0,0,largura_chapa_cm,altura_chapa_cm)]}
         alguma_peca_foi_colocada_na_chapa_idx_global = False
 
-        while True: # Loop para saturar a chapa atual
+        while True: 
             peca_colocada_nesta_passada_na_chapa = False
             idx_iter_peca_geral = 0
             while idx_iter_peca_geral < len(pecas_para_alocar_geral):
@@ -43,15 +45,10 @@ def cortar_chapas(largura_chapa_cm, altura_chapa_cm, pecas_cm_com_id_e_qtd_origi
                         ex, ey, ew, eh = espaco_tupla_atual
                         if larg_orient <= ew and alt_orient <= eh:
                             pontuacao_atual = float('inf')
-                            if larg_orient == ew and alt_orient == eh: 
-                                pontuacao_atual = 0  
-                            elif alt_orient == eh: 
-                                pontuacao_atual = 100000 + (ew - larg_orient) 
-                            elif larg_orient == ew: 
-                                pontuacao_atual = 200000 + (eh - alt_orient) 
-                            else: 
-                                pontuacao_atual = 300000 + (ew * eh) - (larg_orient * alt_orient) 
-
+                            if larg_orient == ew and alt_orient == eh: pontuacao_atual = 0  
+                            elif alt_orient == eh: pontuacao_atual = 100000 + (ew - larg_orient) 
+                            elif larg_orient == ew: pontuacao_atual = 200000 + (eh - alt_orient) 
+                            else: pontuacao_atual = 300000 + (ew * eh) - (larg_orient * alt_orient) 
                             if melhor_espaco_para_esta_orientacao is None or pontuacao_atual < melhor_espaco_para_esta_orientacao[2]:
                                 melhor_espaco_para_esta_orientacao = (espaco_tupla_atual, idx_espaco_na_lista, pontuacao_atual)
                     
@@ -59,14 +56,11 @@ def cortar_chapas(largura_chapa_cm, altura_chapa_cm, pecas_cm_com_id_e_qtd_origi
                         if melhor_encaixe_para_peca_candidata is None or melhor_espaco_para_esta_orientacao[2] < melhor_encaixe_para_peca_candidata[5]:
                             esp_tupla, idx_esp, pont_esp = melhor_espaco_para_esta_orientacao
                             melhor_encaixe_para_peca_candidata = (
-                                larg_orient, alt_orient, status_rotacao,
-                                esp_tupla, idx_esp, pont_esp
-                            )
+                                larg_orient, alt_orient, status_rotacao, esp_tupla, idx_esp, pont_esp)
                 
                 if melhor_encaixe_para_peca_candidata:
                     larg_final, alt_final, rot_final, esp_final, idx_esp_pop, _ = melhor_encaixe_para_peca_candidata
                     ex, ey, ew, eh = esp_final
-
                     chapa_atual['pecas_alocadas'].append({
                         'id': peca_candidata['id'], 'x': ex, 'y': ey,
                         'largura': larg_final, 'altura': alt_final,
@@ -83,51 +77,56 @@ def cortar_chapas(largura_chapa_cm, altura_chapa_cm, pecas_cm_com_id_e_qtd_origi
                     alguma_peca_foi_colocada_na_chapa_idx_global = True
                     peca_candidata_foi_efetivamente_colocada = True 
                 
-                if not peca_candidata_foi_efetivamente_colocada:
-                    idx_iter_peca_geral += 1
-            
-            if not peca_colocada_nesta_passada_na_chapa:
-                break 
-        
-        if chapa_atual['pecas_alocadas']:
-            chapas_utilizadas.append(chapa_atual)
+                if not peca_candidata_foi_efetivamente_colocada: idx_iter_peca_geral += 1
+            if not peca_colocada_nesta_passada_na_chapa: break
+        if chapa_atual['pecas_alocadas']: chapas_utilizadas.append(chapa_atual)
         elif not alguma_peca_foi_colocada_na_chapa_idx_global and pecas_para_alocar_geral:
-            pecas_nao_alocadas_final.extend(pecas_para_alocar_geral)
-            pecas_para_alocar_geral.clear()
-            break
-            
-    if pecas_para_alocar_geral:
-        pecas_nao_alocadas_final.extend(pecas_para_alocar_geral)
+            pecas_nao_alocadas_final.extend(pecas_para_alocar_geral); pecas_para_alocar_geral.clear(); break
+    if pecas_para_alocar_geral: pecas_nao_alocadas_final.extend(pecas_para_alocar_geral)
     return chapas_utilizadas, pecas_nao_alocadas_final
 
-# --- Funções Auxiliares de Plotagem ---
-def plotar_chapas_todas(chapas_resultado, largura_chapa_cm, altura_chapa_cm):
+# --- Função de Plotagem Modificada (sem alterações) ---
+def plotar_chapas_na_figura(fig, chapas_resultado, largura_chapa_cm, altura_chapa_cm):
+    fig.clear() 
     num_chapas = len(chapas_resultado)
-    if num_chapas == 0: messagebox.showinfo("Resultado", "Nenhuma chapa utilizada."); return
-    cols=2; rows=(num_chapas+cols-1)//cols
-    fig,axes = plt.subplots(rows,cols,figsize=(7*cols,5*rows),squeeze=False)
-    fig.suptitle("Planos de Corte Otimizados (cm)", fontsize=16)
+    if num_chapas == 0:
+        ax = fig.add_subplot(111)
+        ax.text(0.5, 0.5, "Nenhuma chapa utilizada ou nenhuma peça coube.", 
+                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([]); ax.set_yticks([])
+        fig.canvas.draw_idle(); return
+    cols = 1 
+    if num_chapas > 1 : cols = 2 
+    if num_chapas > 4 : cols = 2 
+    rows = (num_chapas + cols - 1) // cols
+    gs = fig.add_gridspec(rows, cols, hspace=0.3, wspace=0.2)
     for idx, chapa_info in enumerate(chapas_resultado):
-        row_idx=idx//cols; col_idx=idx%cols; ax=axes[row_idx,col_idx]
-        ax.set_title(f'Chapa {chapa_info["id_chapa"]}'); ax.set_xlim(0,largura_chapa_cm); ax.set_ylim(0,altura_chapa_cm)
-        ax.set_aspect('equal',adjustable='box'); ax.invert_yaxis()
-        ax.add_patch(patches.Rectangle((0,0),largura_chapa_cm,altura_chapa_cm,fill=False,edgecolor='black',lw=0.5))
+        ax = fig.add_subplot(gs[idx // cols, idx % cols])
+        ax.set_title(f'Chapa {chapa_info["id_chapa"]}', fontsize=10)
+        ax.set_xlim(0, largura_chapa_cm); ax.set_ylim(0, altura_chapa_cm)
+        ax.set_aspect('equal', adjustable='box'); ax.invert_yaxis()
+        ax.add_patch(patches.Rectangle((0,0),largura_chapa_cm,altura_chapa_cm,fill=False,edgecolor='gray',lw=0.5, linestyle='--'))
         pecas_na_chapa = chapa_info['pecas_alocadas']; num_pecas_na_chapa = len(pecas_na_chapa)
+        cmap = plt.cm.get_cmap('tab20', num_pecas_na_chapa if num_pecas_na_chapa > 0 else 1)
         for i, peca in enumerate(pecas_na_chapa):
-            x,y,w,h=peca['x'],peca['y'],peca['largura'],peca['altura']; id_texto=peca.get("id","")
-            cor_face = plt.cm.get_cmap('viridis', num_pecas_na_chapa if num_pecas_na_chapa > 0 else 1)(i/num_pecas_na_chapa if num_pecas_na_chapa > 1 else 0.5)
-            rect = patches.Rectangle((x,y),w,h,edgecolor='black',facecolor=cor_face,lw=1,alpha=0.75); ax.add_patch(rect)
-            texto_cor = 'white' if (cor_face[0]*0.299 + cor_face[1]*0.587 + cor_face[2]*0.114) < 0.5 else 'black'
-            ax.text(x+w/2, y+h/2, f'{id_texto}\n{w}x{h}', ha='center',va='center',fontsize=7,color=texto_cor)
-        ax.set_xlabel('Largura (cm)'); ax.set_ylabel('Altura (cm)'); ax.grid(True,linestyle=':',linewidth=0.5,alpha=0.7)
-    for idx in range(num_chapas, rows*cols): row_idx=idx//cols; col_idx=idx%cols; fig.delaxes(axes[row_idx,col_idx])
-    plt.tight_layout(rect=[0,0,1,0.96]); plt.show()
+            x,y,w,h=peca['x'],peca['y'],peca['largura'],peca['altura']; id_texto=peca.get("id","P")
+            cor_face = cmap(i / num_pecas_na_chapa if num_pecas_na_chapa > 1 else 0.5)
+            rect = patches.Rectangle((x,y),w,h,edgecolor='black',facecolor=cor_face,lw=1,alpha=0.8); ax.add_patch(rect)
+            texto_cor = 'white' if (cor_face[0]*0.299 + cor_face[1]*0.587 + cor_face[2]*0.114) < 0.4 else 'black'
+            ax.text(x+w/2, y+h/2, f'{id_texto}\n{w}x{h}', ha='center',va='center',fontsize=6,color=texto_cor, fontweight='bold')
+        ax.set_xlabel('Largura (cm)', fontsize=8); ax.set_ylabel('Altura (cm)', fontsize=8)
+        ax.tick_params(axis='both', which='major', labelsize=7)
+        ax.grid(True,linestyle=':',linewidth=0.5,alpha=0.5)
+    for i in range(num_chapas, rows * cols):
+        ax_para_remover = fig.add_subplot(gs[i // cols, i % cols])
+        ax_para_remover.set_visible(False)
+    fig.canvas.draw_idle()
 
 class CorteGUI:
     def __init__(self, master):
         self.master = master
-        master.title("Otimizador de Corte de Chapas v1.8") 
-        master.resizable(width=False, height=False)
+        master.title("Otimizador de Corte de Chapas v1.9") 
+        master.geometry("1000x700") 
 
         menubar = Menu(master)
         filemenu = Menu(menubar, tearoff=0)
@@ -140,61 +139,107 @@ class CorteGUI:
         menubar.add_cascade(label="Arquivo", menu=filemenu)
         master.config(menu=menubar)
         
-        pad_options = {'padx': 5, 'pady': 3}
-        sticky_options = {'sticky': "ew"}
+        self.paned_window = ttk.PanedWindow(master, orient=tk.HORIZONTAL)
+        self.paned_window.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        chapa_frame = tk.LabelFrame(master, text="Dimensões da Chapa (cm)", **pad_options)
-        chapa_frame.grid(row=0, column=0, columnspan=2, **pad_options, **sticky_options)
+        self.frame_esquerdo = ttk.Frame(self.paned_window, width=600, height=600, relief=tk.SUNKEN)
+        self.paned_window.add(self.frame_esquerdo, weight=2) 
+        self.figura_plot = Figure(figsize=(6,6), dpi=100)
+        self.canvas_plot = FigureCanvasTkAgg(self.figura_plot, master=self.frame_esquerdo)
+        self.canvas_plot.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.frame_direito = ttk.Frame(self.paned_window, width=400, height=600, relief=tk.SUNKEN)
+        self.paned_window.add(self.frame_direito, weight=1)
+
+        pad_options = {'padx': 5, 'pady': 3}
+        chapa_frame = tk.LabelFrame(self.frame_direito, text="Dimensões da Chapa (cm)", **pad_options)
+        chapa_frame.pack(fill=tk.X, padx=5, pady=5)
         tk.Label(chapa_frame, text="Largura:").grid(row=0, column=0, sticky="w", **pad_options)
         self.largura_chapa_entry = tk.Entry(chapa_frame, width=10); self.largura_chapa_entry.grid(row=0,column=1,sticky="ew",**pad_options); self.largura_chapa_entry.insert(0,"275")
         tk.Label(chapa_frame, text="Altura:").grid(row=1, column=0, sticky="w", **pad_options)
         self.altura_chapa_entry = tk.Entry(chapa_frame, width=10); self.altura_chapa_entry.grid(row=1,column=1,sticky="ew",**pad_options); self.altura_chapa_entry.insert(0,"200")
         chapa_frame.columnconfigure(1, weight=1)
 
-        pecas_frame = tk.LabelFrame(master, text="Peças a Cortar", **pad_options)
-        pecas_frame.grid(row=1, column=0, columnspan=2, **pad_options, **sticky_options)
-        self.treeview_pecas = ttk.Treeview(pecas_frame, columns=("id_nome","altura","largura","quantidade"),show="headings",height=7)
-        self.treeview_pecas.heading("id_nome",text="ID/Nome"); self.treeview_pecas.heading("altura",text="Altura (cm)")
-        self.treeview_pecas.heading("largura",text="Largura (cm)"); self.treeview_pecas.heading("quantidade",text="Qtd.")
-        self.treeview_pecas.column("id_nome",width=150,anchor=tk.W); self.treeview_pecas.column("altura",width=80,anchor=tk.CENTER)
-        self.treeview_pecas.column("largura",width=80,anchor=tk.CENTER); self.treeview_pecas.column("quantidade",width=50,anchor=tk.CENTER)
-        self.treeview_pecas.grid(row=0,column=0,columnspan=2,**pad_options,sticky="nsew")
-        pecas_frame.columnconfigure(0,weight=1); pecas_frame.rowconfigure(0,weight=1)
-        scrollbar = ttk.Scrollbar(pecas_frame,orient="vertical",command=self.treeview_pecas.yview)
-        self.treeview_pecas.configure(yscrollcommand=scrollbar.set); scrollbar.grid(row=0,column=1,sticky="ns",rowspan=4)
+        pecas_frame = tk.LabelFrame(self.frame_direito, text="Peças a Cortar", **pad_options)
+        pecas_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        tree_frame = ttk.Frame(pecas_frame); tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0,5))
+        tree_frame.columnconfigure(0, weight=1); tree_frame.rowconfigure(0, weight=1)
+        self.treeview_pecas = ttk.Treeview(tree_frame, columns=("id_nome","altura","largura","quantidade"),show="headings",height=5)
+        self.treeview_pecas.heading("id_nome",text="ID/Nome"); self.treeview_pecas.heading("altura",text="Altura")
+        self.treeview_pecas.heading("largura",text="Largura"); self.treeview_pecas.heading("quantidade",text="Qtd.")
+        self.treeview_pecas.column("id_nome",width=120,anchor=tk.W, stretch=tk.YES)
+        self.treeview_pecas.column("altura",width=60,anchor=tk.CENTER, stretch=tk.YES)
+        self.treeview_pecas.column("largura",width=60,anchor=tk.CENTER, stretch=tk.YES)
+        self.treeview_pecas.column("quantidade",width=40,anchor=tk.CENTER, stretch=tk.NO)
+        self.treeview_pecas.grid(row=0,column=0,sticky="nsew")
+        scrollbar = ttk.Scrollbar(tree_frame,orient="vertical",command=self.treeview_pecas.yview)
+        self.treeview_pecas.configure(yscrollcommand=scrollbar.set); scrollbar.grid(row=0,column=1,sticky="ns")
 
-        btn_manage_frame = tk.Frame(pecas_frame)
-        btn_manage_frame.grid(row=1,column=0,sticky="ew",**pad_options)
-        self.add_peca_btn = tk.Button(btn_manage_frame,text="Adicionar",command=self.adicionar_peca_dialog); self.add_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-        self.edit_peca_btn = tk.Button(btn_manage_frame,text="Editar",command=self.editar_peca_dialog); self.edit_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-        self.duplicate_peca_btn = tk.Button(btn_manage_frame,text="Duplicar",command=self.duplicar_peca_selecionada); self.duplicate_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-
-        btn_remove_frame = tk.Frame(pecas_frame)
-        btn_remove_frame.grid(row=2,column=0,sticky="ew",**pad_options)
-        self.remove_peca_btn = tk.Button(btn_remove_frame,text="Remover",command=self.remover_peca_selecionada); self.remove_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-        self.undo_remove_btn = tk.Button(btn_remove_frame,text="Desfazer Remoção",command=self.desfazer_remocao,state=tk.DISABLED); self.undo_remove_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        btn_row1_frame = ttk.Frame(pecas_frame); btn_row1_frame.pack(fill=tk.X, pady=2)
+        self.add_peca_btn = tk.Button(btn_row1_frame,text="Adicionar",command=self.adicionar_peca_dialog); self.add_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        self.edit_peca_btn = tk.Button(btn_row1_frame,text="Editar",command=self.editar_peca_dialog); self.edit_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        self.duplicate_peca_btn = tk.Button(btn_row1_frame,text="Duplicar",command=self.duplicar_peca_selecionada); self.duplicate_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        btn_row2_frame = ttk.Frame(pecas_frame); btn_row2_frame.pack(fill=tk.X, pady=2)
+        self.remove_peca_btn = tk.Button(btn_row2_frame,text="Remover",command=self.remover_peca_selecionada); self.remove_peca_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        self.undo_remove_btn = tk.Button(btn_row2_frame,text="Desfazer Remoção",command=self.desfazer_remocao,state=tk.DISABLED); self.undo_remove_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        btn_row3_frame = ttk.Frame(pecas_frame); btn_row3_frame.pack(fill=tk.X, pady=2)
+        self.move_up_btn = tk.Button(btn_row3_frame,text="Mover Acima ↑",command=lambda:self.mover_peca_selecionada("cima")); self.move_up_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        self.move_down_btn = tk.Button(btn_row3_frame,text="Mover Abaixo ↓",command=lambda:self.mover_peca_selecionada("baixo")); self.move_down_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
         
-        btn_order_frame = tk.Frame(pecas_frame)
-        btn_order_frame.grid(row=3,column=0,sticky="ew",**pad_options)
-        self.move_up_btn = tk.Button(btn_order_frame,text="Mover Acima ↑",command=lambda:self.mover_peca_selecionada("cima")); self.move_up_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-        self.move_down_btn = tk.Button(btn_order_frame,text="Mover Abaixo ↓",command=lambda:self.mover_peca_selecionada("baixo")); self.move_down_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
-        
-        acoes_frame = tk.Frame(master)
-        acoes_frame.grid(row=2,column=0,columnspan=2,pady=(10,5),padx=5,sticky="ew")
-        self.executar_corte_btn = tk.Button(acoes_frame,text="Executar Otimização de Corte",command=self.processar_cortes,bg="lightblue",font=('Arial',10,'bold')); self.executar_corte_btn.pack(side=tk.LEFT,expand=True,fill=tk.X,padx=2)
+        acoes_frame = tk.LabelFrame(self.frame_direito, text="Ações", **pad_options)
+        acoes_frame.pack(fill=tk.X, padx=5, pady=(10,5))
+        self.executar_corte_btn = tk.Button(acoes_frame,text="Otimizar e Visualizar Cortes",command=self.atualizar_visualizacao_e_otimizar,bg="lightblue",font=('Arial',10,'bold')); self.executar_corte_btn.pack(fill=tk.X, padx=2, pady=5)
 
         self.pecas_a_cortar = []
-        self.resultado_cortes = None 
+        self.resultado_cortes_otimizado = None 
         self.proximo_id_original = 0
         self.ultima_peca_removida_info = None
+        self.desenhar_placeholder_visualizacao()
 
+    def desenhar_placeholder_visualizacao(self):
+        self.figura_plot.clear()
+        ax = self.figura_plot.add_subplot(111)
+        ax.text(0.5, 0.5, "A visualização do corte aparecerá aqui.\nAdicione peças e clique em 'Otimizar'.",
+                horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes, wrap=True, bbox=dict(boxstyle="round,pad=0.5", fc="aliceblue", ec="lightsteelblue"))
+        ax.set_xticks([]); ax.set_yticks([])
+        self.figura_plot.canvas.draw_idle()
+
+    def atualizar_visualizacao_e_otimizar(self):
+        largura_chapa, altura_chapa = self._validar_dimensoes_chapa()
+        if largura_chapa is None: return
+        if not self.pecas_a_cortar: 
+            # messagebox.showwarning("Aviso", "Adicione peças para o corte.") # Removido para não ser repetitivo
+            self.desenhar_placeholder_visualizacao() 
+            return
+        
+        pecas_exp = []
+        for p_info in self.pecas_a_cortar:
+            for _ in range(p_info['quant']):
+                pecas_exp.append({'id': p_info['id'], 'larg': p_info['larg'], 'alt': p_info['alt'], 'original_idx': p_info['original_idx'] })
+        
+        self.resultado_cortes_otimizado, nao_alocadas = cortar_chapas(largura_chapa, altura_chapa, pecas_exp) 
+        
+        if self.resultado_cortes_otimizado:
+            plotar_chapas_na_figura(self.figura_plot, self.resultado_cortes_otimizado, largura_chapa, altura_chapa)
+            if nao_alocadas:
+                msg = "Peças não alocadas:\n"; mapa = {}
+                for p_na in nao_alocadas:
+                    desc = next((item for item in self.pecas_a_cortar if item["original_idx"] == p_na['original_idx']), None)
+                    if desc: nome = f"{desc.get('id_display','P')} ({desc['larg']}x{desc['alt']})"; mapa[nome] = mapa.get(nome,0)+1
+                for nome, qtd in mapa.items(): msg += f"- {nome}: {qtd} un.\n"
+                messagebox.showwarning("Aviso de Otimização", msg)
+        else:
+            messagebox.showerror("Erro de Otimização", "Não foi possível alocar nenhuma peça.")
+            self.desenhar_placeholder_visualizacao() 
+
+        self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info = None
+    
     def _get_selected_treeview_index(self):
         selected_item_id = self.treeview_pecas.focus()
         if selected_item_id:
-            try:
-                return self.treeview_pecas.index(selected_item_id)
-            except tk.TclError: # Pode acontecer se o item não for encontrado (raro com focus)
-                return None
+            try: return self.treeview_pecas.index(selected_item_id)
+            except tk.TclError: return None
         return None
 
     def _validar_dimensoes_chapa(self):
@@ -221,7 +266,9 @@ class CorteGUI:
             npi=d.result; npi['original_idx']=self.proximo_id_original
             if not npi.get('id'): npi['id']=f"P{self.proximo_id_original+1}"
             npi['id_display']=npi['id']; self.pecas_a_cortar.append(npi); self.proximo_id_original+=1
-            self.atualizar_treeview_pecas(); self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
+            self.atualizar_treeview_pecas()
+            self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
+            self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
 
     def editar_peca_dialog(self):
         idx=self._get_selected_treeview_index();
@@ -229,7 +276,9 @@ class CorteGUI:
         d=PecaDialog(self.master,title="Editar Peça",initial_data=self.pecas_a_cortar[idx])
         if d.result:
             self.pecas_a_cortar[idx]=d.result; self.pecas_a_cortar[idx]['id_display']=self.pecas_a_cortar[idx]['id']
-            self.atualizar_treeview_pecas(); self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
+            self.atualizar_treeview_pecas()
+            self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
+            self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
 
     def duplicar_peca_selecionada(self):
         idx=self._get_selected_treeview_index();
@@ -240,6 +289,7 @@ class CorteGUI:
         if self.treeview_pecas.get_children():
             last_iid=self.treeview_pecas.get_children()[-1]
             self.treeview_pecas.selection_set(last_iid);self.treeview_pecas.focus(last_iid);self.treeview_pecas.see(last_iid)
+        self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
         self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
 
     def remover_peca_selecionada(self):
@@ -248,8 +298,10 @@ class CorteGUI:
         pd_data=self.pecas_a_cortar[idx]; msg=f"ID: {pd_data.get('id_display','N/A')}\n{pd_data['alt']}A x {pd_data['larg']}L (Qtd: {pd_data['quant']})"
         if messagebox.askyesno("Confirmar",f"Remover:\n{msg}?"):
             rem=self.pecas_a_cortar.pop(idx); self.ultima_peca_removida_info=(idx,rem)
-            self.atualizar_treeview_pecas(); self.undo_remove_btn.config(state=tk.NORMAL)
-            if self.pecas_a_cortar: # Tenta selecionar o próximo ou anterior
+            self.atualizar_treeview_pecas()
+            self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
+            self.undo_remove_btn.config(state=tk.NORMAL)
+            if self.pecas_a_cortar:
                 new_idx_to_select=min(idx,len(self.pecas_a_cortar)-1)
                 if new_idx_to_select>=0 and self.treeview_pecas.get_children():
                     iid_to_select=self.treeview_pecas.get_children()[new_idx_to_select]
@@ -262,6 +314,7 @@ class CorteGUI:
             if idx < len(self.treeview_pecas.get_children()):
                 iid_to_select=self.treeview_pecas.get_children()[idx]
                 self.treeview_pecas.selection_set(iid_to_select);self.treeview_pecas.focus(iid_to_select);self.treeview_pecas.see(iid_to_select)
+            self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
             self.ultima_peca_removida_info=None; self.undo_remove_btn.config(state=tk.DISABLED)
         else: messagebox.showinfo("Info","Nada para desfazer.")
 
@@ -275,37 +328,14 @@ class CorteGUI:
         elif direcao=="baixo" and idx_a<n_pecas-1: 
             idx_n=idx_a+1
             self.pecas_a_cortar[idx_a],self.pecas_a_cortar[idx_n] = self.pecas_a_cortar[idx_n],self.pecas_a_cortar[idx_a]
-        else: return # Movimento inválido ou no limite
-        
-        if idx_n!=-1: # Se o movimento ocorreu
+        else: return 
+        if idx_n!=-1: 
             self.atualizar_treeview_pecas()
             if self.treeview_pecas.get_children() and 0<=idx_n<len(self.treeview_pecas.get_children()):
                 iid_to_select=self.treeview_pecas.get_children()[idx_n]
                 self.treeview_pecas.selection_set(iid_to_select);self.treeview_pecas.focus(iid_to_select);self.treeview_pecas.see(iid_to_select)
+            self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
             self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info=None
-    
-    def processar_cortes(self):
-        largura_chapa, altura_chapa = self._validar_dimensoes_chapa()
-        if largura_chapa is None: return
-        if not self.pecas_a_cortar: messagebox.showwarning("Aviso", "Adicione peças para o corte."); return
-        pecas_exp = []
-        for p_info in self.pecas_a_cortar:
-            for _ in range(p_info['quant']):
-                pecas_exp.append({'id': p_info['id'], 'larg': p_info['larg'], 'alt': p_info['alt'], 'original_idx': p_info['original_idx'] })
-        self.resultado_cortes, nao_alocadas = cortar_chapas(largura_chapa, altura_chapa, pecas_exp)
-        if self.resultado_cortes:
-            plotar_chapas_todas(self.resultado_cortes, largura_chapa, altura_chapa)
-            if nao_alocadas:
-                msg = "Peças não alocadas:\n"; mapa = {}
-                for p_na in nao_alocadas:
-                    desc = next((item for item in self.pecas_a_cortar if item["original_idx"] == p_na['original_idx']), None)
-                    if desc: nome = f"{desc.get('id_display','P')} ({desc['larg']}x{desc['alt']})"; mapa[nome] = mapa.get(nome,0)+1
-                for nome, qtd in mapa.items(): msg += f"- {nome}: {qtd} un.\n"
-                messagebox.showwarning("Aviso", msg)
-            else: messagebox.showinfo("Sucesso", "Todas as peças foram alocadas!")
-        else:
-            messagebox.showerror("Erro", "Não foi possível alocar nenhuma peça.")
-        self.undo_remove_btn.config(state=tk.DISABLED); self.ultima_peca_removida_info = None
     
     def importar_lista_pecas_excel(self):
         if self.pecas_a_cortar and not messagebox.askyesno("Confirmar Importação", "Isso substituirá a lista de peças atual. Deseja continuar?"): return
@@ -341,11 +371,18 @@ class CorteGUI:
                 except KeyError as ke: messagebox.showwarning("Aviso de Importação", f"Ignorando linha {index+2} do Excel: coluna {ke} não encontrada."); continue
             if novas_pecas:
                 self.pecas_a_cortar = novas_pecas; self.proximo_id_original = temp_proximo_id_original 
-                self.atualizar_treeview_pecas(); self.undo_remove_btn.config(state=tk.DISABLED)
-                self.ultima_peca_removida_info = None; self.resultado_cortes = None 
+                self.atualizar_treeview_pecas()
+                self.atualizar_visualizacao_e_otimizar() # ATUALIZA VISUALIZAÇÃO
+                self.undo_remove_btn.config(state=tk.DISABLED)
+                self.ultima_peca_removida_info = None; self.resultado_cortes_otimizado = None 
                 messagebox.showinfo("Importação Concluída", f"{len(novas_pecas)} grupo(s) de peças importado(s) com sucesso!")
-            else: messagebox.showwarning("Importação", "Nenhuma peça válida encontrada no arquivo Excel para importar.")
-        except Exception as e: messagebox.showerror("Erro de Importação", f"Ocorreu um erro ao importar o arquivo Excel:\n{e}")
+            else: 
+                messagebox.showwarning("Importação", "Nenhuma peça válida encontrada no arquivo Excel para importar.")
+                self.desenhar_placeholder_visualizacao() # Limpa visualização se importação falhar ou for vazia
+        except Exception as e: 
+            messagebox.showerror("Erro de Importação", f"Ocorreu um erro ao importar o arquivo Excel:\n{e}")
+            self.desenhar_placeholder_visualizacao()
+
 
     def exportar_lista_pecas_para_excel(self):
         if not self.pecas_a_cortar: messagebox.showwarning("Exportar Lista", "Não há peças na lista para exportar."); return
@@ -366,43 +403,23 @@ class CorteGUI:
 class PecaDialog(simpledialog.Dialog): 
     def __init__(self,parent,title=None,initial_data=None):
         self.initial_data=initial_data if initial_data else {}
-        # print(f"DEBUG: PecaDialog.__init__ - parent: {parent}, title: {title}") # Linha de depuração 1
-        
-        # Chama o __init__ da classe pai (simpledialog.Dialog)
-        # É aqui que self.top (a janela Toplevel) deveria ser criada.
         super().__init__(parent,title) 
-        
-        # print(f"DEBUG: PecaDialog.__init__ - super().__init__ completed.") # Linha de depuração 2
-        # print(f"DEBUG: PecaDialog.__init__ - hasattr(self, 'top'): {hasattr(self, 'top')}") # Linha de depuração 3
-        
         if hasattr(self, 'top') and self.top is not None:
-            # print(f"DEBUG: PecaDialog.__init__ - self.top exists: {self.top}. Setting resizable.") # Linha de depuração 4
-            try:
-                self.top.resizable(width=False, height=False)
-            except tk.TclError as e:
-                print(f"DEBUG: PecaDialog.__init__ - Could not set resizable on self.top: {e}")
-        # else:
-            # print("DEBUG: PecaDialog.__init__ - self.top was NOT found or is None after super().__init__.") # Linha de depuração 5
-
-    def body(self,master_frame): # O argumento é o frame onde o corpo do diálogo é construído
+            try: self.top.resizable(width=False, height=False)
+            except tk.TclError: pass 
+    def body(self,master_frame):
         tk.Label(master_frame,text="ID/Nome:").grid(row=0,column=0,sticky="w"); self.id_entry=tk.Entry(master_frame,width=20); self.id_entry.grid(row=0,column=1)
         if self.initial_data.get('id'):self.id_entry.insert(0,self.initial_data['id'])
-        
         tk.Label(master_frame,text="Largura (cm):").grid(row=1,column=0,sticky="w"); self.larg_entry=tk.Entry(master_frame,width=10); self.larg_entry.grid(row=1,column=1)
         if self.initial_data.get('larg'):self.larg_entry.insert(0,self.initial_data['larg'])
-        
         tk.Label(master_frame,text="Altura (cm):").grid(row=2,column=0,sticky="w"); self.alt_entry=tk.Entry(master_frame,width=10); self.alt_entry.grid(row=2,column=1)
         if self.initial_data.get('alt'):self.alt_entry.insert(0,self.initial_data['alt'])
-        
         tk.Label(master_frame,text="Quantidade:").grid(row=3,column=0,sticky="w"); self.quant_entry=tk.Entry(master_frame,width=10); self.quant_entry.grid(row=3,column=1)
-        self.quant_entry.insert(0,self.initial_data.get('quant',"1"))
-        
-        return self.id_entry # Retorna o widget que deve receber o foco inicial
-    
+        self.quant_entry.insert(0,self.initial_data.get('quant',"1")); return self.id_entry
     def apply(self):
         try:
             id_p=self.id_entry.get().strip(); l=int(self.larg_entry.get()); a=int(self.alt_entry.get()); q=int(self.quant_entry.get())
-            if l<=0 or a<=0 or q<=0: messagebox.showerror("Erro","Dimensões/qtd devem ser >0.",parent=self); self.result=None; return
+            if l<=0 or a<=0 or q<=0: messagebox.showerror("Erro","Dimensões/qtd >0.",parent=self); self.result=None; return
             self.result={'id':id_p,'larg':l,'alt':a,'quant':q}
             if self.initial_data and 'original_idx' in self.initial_data: self.result['original_idx']=self.initial_data['original_idx']
         except ValueError: messagebox.showerror("Erro","Dimensões/qtd devem ser inteiros.",parent=self); self.result=None
@@ -410,18 +427,14 @@ class PecaDialog(simpledialog.Dialog):
 if __name__ == "__main__":
     try:
         root = tk.Tk()
-        # master.resizable(width=False, height=False) deve ser root.resizable(...)
-        root.resizable(width=False, height=False) # Correção: Aplicar na instância root
+        root.resizable(width=False, height=False) 
         app = CorteGUI(root)
         root.mainloop()
     except Exception as e:
         import traceback
         error_message = f"Ocorreu um erro fatal ao iniciar o programa:\n\n{traceback.format_exc()}"
-        print(error_message) 
         try:
-            error_root = tk.Tk()
-            error_root.withdraw() 
+            temp_root = tk.Tk(); temp_root.withdraw() 
             messagebox.showerror("Erro Fatal na Inicialização", error_message)
-            error_root.destroy()
-        except:
-            pass
+            temp_root.destroy()
+        except: print(error_message)
